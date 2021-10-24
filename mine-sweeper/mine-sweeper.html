@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지뢰찾기</title>
+    <style>
+        table  {border-collapse: collapse;}
+        td{
+            border:1px solid #bbb;
+            text-align: center;
+            line-height: 20px;
+            width:20px;
+            height: 20px;
+            background:#888;
+        }
+        td.opend{background:white;}
+        td.flag{background:red;}
+        td.question{background: orange;}
+    </style>
+</head>
+<body>
+    <form id="form">
+        <input placeholder="가로줄" id="row" size='5'/>
+        <input placeholder="세로줄" id="cell" size='5'/>
+        <input placeholder="지뢰 개수" id="mine" size='5'/>
+        <button>생성</button>
+    </form>
+    <div id=timer>0초</div>
+    <table id="table">
+        <tbody></tbody>
+    </table>
+    <div id="result"></div>
+    <script>
+        const $form =document.querySelector('#form');
+        const $tbody =document.querySelector("#table tbody");
+        const $result =document.querySelector('#result');
+        const $timer =document.querySelector('#timer');
+        let row =10;
+        let cell =10;
+        let mine =10;
+        const dev =true
+        const CODE ={
+            NORMAL : -1,
+            QUESTION :-2,
+            FLAG :-3,
+            QUESTION_MINE: -4,
+            FLAG_MINE :-5,
+            MINE: -6,
+            OPENED:0,
+        }
+        let data;
+        let startTime;
+        let interval;
+        let openCount;
+        let searched;
+        let normalCellFound =false;
+        let fristClick =true;
+        function transferMine(rI,cI){
+            if(normalCellFound) return;
+            if(rI<0|| rI>=row || cI<0 || cI>=cell) return;
+            if(searched[rI][cI])return;
+            if(data[rI]?.[cI] ===CODE.NORMAL){
+                normalCellFound =true;
+                data[rI][cI] =CODE.MINE;
+            }else{
+                searched[rI][cI] =true
+                transferMine(rI-1,cI-1);
+                transferMine(rI-1,cI);
+                transferMine(rI-1,cI+1);
+
+                transferMine(rI,cI-1);
+                transferMine(rI,cI+1);
+
+                transferMine(rI+1,cI-1);
+                transferMine(rI+1,cI);
+                transferMine(rI+1,cI+1);
+            }
+        }
+        function onSubmit(){
+            event.preventDefault();
+            row =parseInt(event.target.row.value);
+            cell =parseInt(event.target.cell.value);
+            mine =parseInt(event.target.mine.value);
+            openCount=0;
+            clearInterval(interval);
+            $tbody.innerHTML='';
+            drawTable();
+
+            startTime = new Date();
+             interval= setInterval(()=>{
+                const time= Math.floor((new Date()-startTime)/1000);
+                $timer.textContent=`${time}초`;
+            },1000)
+        }
+        $form.addEventListener('submit',onSubmit);
+     
+        function plantMine(){
+
+            //임의 배열 [1,~100] 배열 생성
+            const candidate =Array(row *cell).fill().map((arr,i)=>{
+                return i;
+            })
+            const shuffle =[];
+
+            // 지뢰 있는곳 랜덤으로 10개생성
+            while(candidate.length > row * cell - mine){
+                const chosen =candidate.splice(Math.floor(Math.random()* candidate.length),1)[0];
+                shuffle.push(chosen);
+            }
+            const data= [];
+
+            // 배열 2차원 배열 생성
+            for(let i = 0; i<row; i++){
+                const rowData =[];
+                data.push(rowData);
+                for(let j = 0; j<cell; j++){
+                    rowData.push(CODE.NORMAL);
+                }
+            }
+            // ex) shuffle =[85,19,93] 지뢰와 2차워 배열에서 지뢰 위치 선정
+            for(let k = 0; k<shuffle.length; k++){
+                const ver =Math.floor(shuffle[k] /cell);
+                const hor =shuffle[k] % cell;
+                data[ver][hor] =CODE.MINE;
+            }
+            return data
+
+        }
+        function onRightClick(e){
+            e.preventDefault();
+  
+            const target = e.target;
+            const rowIndex =target.parentNode.rowIndex; //target.parentNode.rowIndex:  tr에서 몇 행인지 알수있음
+            const cellIndex =target.cellIndex; // target.cellIndex;: tr에서 몇행인지 알수있음
+            const cellData =data[rowIndex][cellIndex];
+        
+            if(cellData===CODE.MINE){// 지뢰면
+                data[rowIndex][cellIndex] =CODE.QUESTION_MINE; //물음표 지뢰로
+                target.className ='question';
+                target.textContent ='?';
+            }else if(cellData === CODE.QUESTION_MINE){ //물음표 지뢰면
+                data[rowIndex][cellIndex] =CODE.FLAG_MINE;
+                target.className ='flag';
+                target.textContent ='!';
+            }else if (cellData ===CODE.FLAG_MINE){//깃발 지뢰면
+                data[rowIndex][cellIndex] =CODE.MINE;
+                target.className ='';
+                // target.textContent ='X';
+            }else if (cellData ===CODE.NORMAL){// 기본 칸이면
+                data[rowIndex][cellIndex] =CODE.QUESTION;
+                target.className ='question';
+                target.textContent ='?';
+            }else if (cellData ===CODE.QUESTION){// 닫힌 칸이면
+                data[rowIndex][cellIndex] =CODE.FLAG;
+                target.className ='flag';
+                target.textContent ='!';
+            }else if (cellData ===CODE.FLAG){// 깃발이면 칸이면
+                data[rowIndex][cellIndex] =CODE.NORMAL;
+                target.className ='';
+                target.textContent ='';
+            }
+        }
+        function countMine(rowIndex,cellIndex){
+
+            // 정사각형 8칸 주변에 지뢰갯수 체크
+            const mines =[CODE.MINE,CODE. QUESTION_MINE, CODE.FLAG_MINE];
+            let  i = 0;
+            mines.includes(data[rowIndex - 1]?.[cellIndex -1]) && i++;
+            mines.includes(data[rowIndex - 1]?.[cellIndex]) && i++;
+            mines.includes(data[rowIndex - 1]?.[cellIndex +1]) && i++;
+
+            mines.includes(data[rowIndex]?.[cellIndex-1]) && i++;
+            mines.includes(data[rowIndex]?.[cellIndex+1]) && i++;
+
+            mines.includes(data[rowIndex + 1]?.[cellIndex -1]) && i++;
+            mines.includes(data[rowIndex + 1]?.[cellIndex]) && i++;
+            mines.includes(data[rowIndex + 1]?.[cellIndex +1]) && i++;
+            return  i
+        }
+        function open(rowIndex,cellIndex){
+        
+            // ?? 0 || ''  undefind,null 뒤에걸 해라
+            // || (5>3) || (2<0) 앞에게 false면 뒤에걸 수행 true면 뒤에거 수행X
+            // && (5>3) && (2<0) 앞에게 true면 뒤에걸 수행 false면  수행X
+            if(data[rowIndex]?.[cellIndex]>=CODE.OPENED) return;
+            const target =$tbody.children[rowIndex]?.children[cellIndex];
+            if(!target){
+                return;
+            }
+            const count =countMine(rowIndex,cellIndex);
+            target.textContent =count || '';
+            target.className ='opend';
+            data[rowIndex][cellIndex] = count;
+            openCount ++;
+            if(openCount === row*cell -mine){
+                const time = (new Date() -startTime)/1000;
+                clearInterval(interval);
+                $tbody.removeEventListener('contextmenu',onRightClick);
+                $tbody.removeEventListener('click',onLeftClick);
+                setTimeout(()=>{
+                    alert(`승리했습니다! ${time}초가 걸렸습니다.`)
+                },100)
+            }
+            return count;
+        }
+        function openArund(rI,cI){
+            const count =open(rI,cI)
+            if(count ===0){
+                setTimeout(()=>{
+                    openArund(rI-1,cI-1);
+                    openArund(rI-1,cI);
+                    openArund(rI-1,cI+1);
+
+                    openArund(rI,cI-1);
+                    openArund(rI,cI+1);
+
+                    openArund(rI+1,cI-1);
+                    openArund(rI+1,cI);
+                    openArund(rI+1,cI+1);
+                },0)
+            }
+        }
+        function showMine(){
+            const mines =[CODE.MINE,CODE.QUESTION_MINE,CODE.FLAG_MINE];
+            data.forEach((row,rowIndex)=>{
+                row.forEach((cell,cellIndex)=>{
+                    if(mines.includes(cell)){
+                        $tbody.children[rowIndex].children[cellIndex].textContent='X';
+                    }
+                })
+            })
+        }
+        function onLeftClick(e){
+         
+            const target =e.target;
+            const rowIndex = target.parentNode.rowIndex;
+            const cellIndex = target.cellIndex;
+            let cellData = data[rowIndex][cellIndex];
+            if(fristClick){
+                fristClick=false;
+                searched = Array(row).fill().map(()=>[]);
+                if(cellData ===CODE.MINE){
+                    transferMine(rowIndex,cellIndex);
+                    data[rowIndex][cellIndex]=CODE.NORMAL;
+                    cellData =CODE.NORMAL;
+                }
+            }
+            if(cellData ===CODE.NORMAL){ //닫힌 칸 이면
+     
+                openArund(rowIndex,cellIndex);
+            }else if(cellData ===CODE.MINE){
+                showMine();
+                target.textContent ='펑';
+                target.className ='opend';
+                clearInterval(interval);
+                $tbody.removeEventListener('contextmenu',onRightClick);
+                $tbody.removeEventListener('click',onLeftClick);
+            } // 나머지 무시
+            //아무동작안함
+        }
+        function drawTable(){
+            data =plantMine();
+            data.forEach((row)=>{
+                const $tr = document.createElement('tr');
+                row.forEach((cell)=>{
+                    const $td = document.createElement('td');
+                    if(cell === CODE.MINE){
+                        // $td.textContent ='X';
+                    }
+                    $tr.append($td);
+                })
+                $tbody.append($tr);
+                //contextmenu 오른쪽클릭 옵션
+                $tbody.addEventListener('contextmenu',onRightClick);
+                $tbody.addEventListener('click',onLeftClick)
+            });
+        }
+
+    </script>
+
+</body>
+</html>
